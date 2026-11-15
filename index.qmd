@@ -1,0 +1,293 @@
+---
+title: "Self-Guided R Toolkit"
+subtitle: "Pod 1 • Reference for continued learning during self-guided fellowship weeks"
+author: "Madeline Ratoza, PT, DPT, PhD"
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    number-sections: false
+    code-copy: true
+    code-fold: false
+    embed-resources: true
+    page-layout: full
+    highlight-style: github
+execute:
+  echo: true
+  warning: true
+  message: false
+  error: false
+editor: source
+---
+
+# Use this toolkit after the lesson
+
+This is a reference for your self-guided work, not a reading assignment to finish in one sitting. Choose the section that solves your current problem. Keep your first project small: one question, one summary, one figure, and an explanation you can reproduce.
+
+| If you need to… | Start with… |
+|---|---|
+| Begin a project | Project organization and the reusable analysis plan |
+| Understand your data | Data dictionary and data checks |
+| Choose or learn a statistical method | Statistics guide and linked resources |
+| Get unstuck | Troubleshooting and the help request template |
+| Keep making progress | Work-session routine and progress log |
+
+## Set up once
+
+Open this QMD in an RStudio project. To render it, use R, Quarto, and the R packages `knitr` and `rmarkdown`. If needed, install those packages once in the Console with `install.packages(c("knitr", "rmarkdown"))`. Run chunks from top to bottom or click Render. Examples use data included in R and base R functions; no dataset download is required.
+
+```{r}
+# This toolkit runs independently of the live lesson.
+flowers <- iris
+```
+
+## Project organization
+
+Use one RStudio project per analysis. Keep original data unchanged, save cleaning decisions in code, and use project-relative paths. A small project can begin with an `analysis.qmd`, a `data-raw/` folder, and an `outputs/` folder. Add a README, data dictionary, and decision log as the work grows.
+
+Decide what one row represents. Put each variable in its own column, use consistent units, and document missing-value codes. Repeated measurements need an ID and a time or visit variable. An identical row is a reason to investigate, not an automatic reason to delete it.
+
+
+
+## A reusable analysis plan
+
+Copy this section into a new QMD before writing analysis code.
+
+| Item | Fill in before analysis |
+|---|---|
+| Purpose and audience | Who needs this result, and why? |
+| Question | What specific comparison, description, or association? |
+| Design | Observational or experimental? Cross-sectional or longitudinal? |
+| Unit of observation | Person, visit, course, location, or another unit? |
+| Data source | Where, when, and how were data collected? |
+| Variables | Outcome, predictors/groups, units, coding, and possible confounders |
+| Inclusion rules | Which observations are eligible, and why? |
+| Data checks | Missingness, types, ranges, duplicate keys, group sizes |
+| Planned outputs | Which table and plot answer the question? |
+| Statistical method, if needed | Why is it appropriate for the design and data? |
+| Assumptions and diagnostics | How will I check them? What if they are not reasonable? |
+| Interpretation limits | Bias, confounding, precision, and generalizability |
+| Completion criteria | What is enough for this version? |
+
+Distinguish planned analyses from questions discovered while exploring. If you change the plan after seeing the data, document why.
+
+## A data dictionary starter
+
+| Variable | Meaning | Type | Unit or levels | Missing code |
+|---|---|---|---|---|
+| `person_id` | Stable participant identifier | Character | One ID per person | Should not be missing |
+| `time` | Measurement occasion | Factor | baseline, followup | `NA` |
+| `score` | Name and definition of measure | Numeric | Specify scale and valid range | `NA` |
+
+An identifier that contains digits may still belong in a character column. A coded category such as 1/2/3 is not automatically a continuous numeric measurement.
+
+## Data checks to keep nearby
+
+```{r}
+# These run on today's example. Replace flowers in your own project.
+names(flowers)
+str(flowers)
+summary(flowers)
+colSums(is.na(flowers))
+sum(duplicated(flowers))  # identical rows: investigate before deleting
+```
+
+For a dataset with an ID, check `anyDuplicated(my_data$person_id)` only if each person should appear once. For repeated visits, check the combined key, for example `anyDuplicated(my_data[c("person_id", "time")])`.
+
+```{r}
+#| eval: false
+# Import recipe: adapt the filename and missing-value codes to your data.
+my_data <- read.csv("data-raw/survey.csv",
+                    na.strings = c("", "NA"))
+str(my_data)
+# Check the imported types before converting columns.
+# Never convert a factor directly with as.numeric() to recover its labels.
+```
+
+## Statistics: where should I start?
+
+Start with the question, measurement scale, and study design. This table is a navigation aid, not an automatic test selector. Repeated observations, clustered samples, confounding, and complex designs may require different models.
+
+| Your question | Possible starting point in R | Check before using |
+|---|---|---|
+| What does this variable look like? | `summary()`, `table()`, `hist()` | Missingness, units, distribution, denominators |
+| How do two independent groups differ on a numeric outcome? | `t.test(y ~ group)`; Welch is the default | Independent observations, outliers, distribution/sample sizes; mean difference is the target |
+| How do paired numeric measurements differ? | `t.test(after, before, paired = TRUE)` | Correct matching; distribution of within-person differences; independent pairs |
+| How do three or more independent groups differ? | `oneway.test(y ~ group)` | Independent observations, group distributions; follow-up comparisons need a plan |
+| Are two numeric variables associated? | `cor.test(x, y)` or `cor.test(x, y, method = "spearman")` | Independent pairs; linear pattern for Pearson, monotonic pattern for Spearman; inspect outliers |
+| Are two categorical variables associated? | `chisq.test(table(a, b))` | Independent observations and adequate expected cell counts; consider `fisher.test()` for small tables |
+| How does a numeric outcome relate to predictors? | `lm(y ~ x + group)` | Functional form, residuals, independence, variance, influential points, confounding |
+| Is the outcome binary, repeated, clustered, or time-to-event? | Find a design-specific guide or consult a statistician | Outcome structure and dependence determine the model |
+
+Nonparametric methods are not assumption-free. A rank-based group test does not universally test a difference in medians. Do not choose a method solely from a normality test, and do not try multiple tests to find a preferred p-value.
+
+### Recipe 1: correlation
+
+```{r}
+# Explore first. This pooled example combines three species.
+plot(flowers$Sepal.Length, flowers$Petal.Length,
+     xlab = "Sepal length (cm)", ylab = "Petal length (cm)")
+association <- cor.test(flowers$Sepal.Length, flowers$Petal.Length,
+                        method = "pearson")
+association$estimate
+association$conf.int
+association$p.value
+```
+
+Report the correlation estimate, uncertainty, number of complete pairs, and context. Here, species differences may contribute to the pooled association. Correlation does not establish a causal effect.
+
+For a monotonic rank association, use `cor.test(x, y, method = "spearman", exact = FALSE)`; `exact = FALSE` requests an approximate p-value and is useful when ties are present. Choose based on the question and data, not which p-value is smaller.
+
+### Recipe 2: compare two independent groups
+
+```{r}
+# Restrict to two species for this two-group illustration.
+two_species <- droplevels(subset(flowers,
+                         Species %in% c("setosa", "versicolor")))
+comparison <- t.test(Sepal.Length ~ Species, data = two_species)
+comparison
+comparison$estimate
+comparison$conf.int
+```
+
+The output names the group means and gives a confidence interval for their difference. Check the order of the groups before describing the sign. Welch's test allows unequal variances, but independence and a reasonable sampling/model basis still matter. This is a syntax example, not a recommendation to test every pair of species.
+
+### Recipe 3: paired measurements
+
+```{r}
+# Synthetic practice data: each row is one correctly matched person.
+paired_data <- data.frame(
+  id = 1:10,
+  before = c(12, 15, 11, 18, 13, 16, 14, 10, 17, 15),
+  after  = c(14, 16, 11, 21, 15, 17, 17, 12, 18, 19)
+)
+paired_data$change <- paired_data$after - paired_data$before
+summary(paired_data$change)
+qqnorm(paired_data$change)
+qqline(paired_data$change)
+t.test(paired_data$after, paired_data$before, paired = TRUE)
+```
+
+Inspect the differences, rather than testing each time point separately. This small synthetic sample is for learning code. A before/after difference alone does not show that an intervention caused the change.
+
+### Recipe 4: a first linear model
+
+```{r}
+model <- lm(Sepal.Length ~ Petal.Length, data = flowers)
+summary(model)
+confint(model)
+# Residual plots are starting points for evaluating a model.
+plot(model, which = 1)  # residuals versus fitted values
+plot(model, which = 2)  # residual Q-Q plot
+```
+
+The slope estimates a difference in mean sepal length per 1 cm higher petal length under this model. It is not a causal effect. A fitted line does not establish that assumptions are reasonable; examine diagnostics and the role of species before treating this as an adequate analysis.
+
+### Read output with a purpose
+
+| Output | Ask yourself |
+|---|---|
+| Estimate | How large is the observed difference or association, and in what units? |
+| Confidence interval | What range is compatible with the data under the model? |
+| P-value | How incompatible are these data with the specified null model and assumptions? |
+| Sample size | Which observations actually contributed? |
+| Diagnostics | Is this model a reasonable description of the data and design? |
+| Practical meaning | Is the magnitude useful or consequential for this question? |
+
+A p-value is not the probability that your hypothesis is true. A large p-value does not prove no effect. Report the magnitude and uncertainty, not just whether a threshold was crossed.
+
+## Reliable guides: choose one for the next task
+
+| Need | Resource | How to use it |
+|---|---|---|
+| Organize an R project | [R for Data Science: scripts and projects](https://r4ds.hadley.nz/workflow-scripts.html) | Set up one project and practice a clean rerun |
+| Explore before testing | [R for Data Science: exploratory data analysis](https://r4ds.hadley.nz/EDA.html) | Apply one question-and-plot cycle to your data |
+| Understand statistical reasoning | [OpenIntro Statistics](https://www.openintro.org/book/os/) | Read the relevant inference section before choosing a test |
+| Learn R's statistical tools | [An Introduction to R](https://cran.r-project.org/doc/manuals/r-release/R-intro.html) | Use statistical model sections as a reference |
+| Check t-test arguments and assumptions | [Official R: t.test](https://search.r-project.org/R/refmans/stats/html/t.test.html) | Compare independent and paired examples |
+| Check correlation methods | [Official R: cor.test](https://search.r-project.org/R/refmans/stats/html/cor.test.html) | Review Pearson and Spearman details |
+| Build toward modeling | [An Introduction to Statistical Learning](https://www.statlearning.com/) | Save for later; work through one R lab at a time |
+| Combine code and narrative | [Quarto: using R](https://quarto.org/docs/computations/r.html) | Adapt an executable document to your own project |
+| Ask a reproducible question | [R for Data Science: getting help](https://r4ds.hadley.nz/workflow-help.html) | Create a small example with data, packages, and code |
+
+Use `?t.test`, `?cor.test`, or `?lm` inside R for the documentation corresponding to your installed version. These references support learning; the examples above are teaching illustrations rather than complete analysis protocols.
+
+## When you get stuck
+
+### A 15-minute reset
+
+1. **Name the problem:** Is it the question, the data, the code, or the interpretation?
+2. **Read the full message:** Start with the first error; later errors may be consequences.
+3. **Shrink the problem:** Run one line and inspect the object with `str()`, `names()`, or `head()`.
+4. **Check one explanation:** Object name, type, path, missingness, or package requirement.
+5. **Save a help request:** Include a small reproducible example and your expected result.
+
+If the problem remains after about 15 minutes, write down the blocker and switch to an independent task or ask for help. You do not have to solve every blocker alone.
+
+| Symptom | First useful check |
+|---|---|
+| `object ... not found` | Run the chunk that creates it; check spelling and capitalization |
+| `could not find function` | Check spelling and the package; use `package::function()` when appropriate |
+| Cannot open a file | Check `getwd()` and `file.exists("data-raw/file.csv")` |
+| A mean returns `NA` | Inspect missing values; decide how to handle them and report the denominator |
+| Numbers behave like text | Run `str()`; look for units or symbols mixed into the column |
+| Code works in Console but Render fails | Restart R and run top to bottom; check for hidden dependencies and file paths |
+| A plot or result seems implausible | Check units, grouping, filters, joins, and duplicate keys before changing the method |
+
+**Help request template:** “I am trying to ___. I expected ___. Instead, I got [exact message]. Here is the smallest code and non-sensitive example data that reproduce it. I have already checked ___.”
+
+If using AI for help, ask it to explain each change, use a small example, and identify assumptions. Run the code and verify outputs yourself. Use synthetic or approved data when seeking help; do not paste confidential records into public tools.
+
+## Keep momentum without making the project bigger
+
+### The 30-minute work session
+
+| Minutes | Action |
+|---|---|
+| 0–3 | Read your last note; choose one concrete outcome |
+| 3–23 | Work on that outcome; keep useful code in the QMD |
+| 23–28 | Run from the top and explain what changed |
+| 28–30 | Save; record your next action and any blocker |
+
+### My progress log
+
+Copy a row after each work session. Track outputs and understanding rather than only time spent.
+
+| Date | Intended task | What I produced or learned | Blocker | Exact next action |
+|---|---|---|---|---|
+| _Date_ | _Make a summary_ | _Counts checked; group table saved_ | _Unsure how to show missingness_ | _Count missing values by group_ |
+
+### My decision log
+
+| Decision | Reason | Consequence to report |
+|---|---|---|
+| _Example: excluded rows missing the outcome_ | _Outcome required for this summary_ | _State number excluded; discuss potential bias_ |
+
+### A suggested four-week path
+
+Adapt this to your schedule. Two focused sessions per week can be enough for a small first project.
+
+| Week | Focus | Evidence of progress |
+|---|---|---|
+| 1 | Define question, organize project, inspect data | Data dictionary and documented checks |
+| 2 | Describe and visualize | One table, one plot, and plain-language interpretation |
+| 3 | Learn one needed method or improve the descriptive report | Method rationale and checks, or a clearer report |
+| 4 | Reproduce, explain, and reflect | Fresh render and a short walkthrough for a peer |
+
+If you miss a session, reduce the next task to something you can finish in 15 minutes. Repeated access or data barriers are reasons to choose a practice dataset, narrow the question, or get help.
+
+## Finish a useful first version
+
+- [ ] My question and unit of observation are explicit.
+- [ ] The data source, variable definitions, and inclusion rules are documented.
+- [ ] Missingness and any exclusions are counted and explained.
+- [ ] The table and plot answer the same question.
+- [ ] Any statistical method is justified by the design and its assumptions.
+- [ ] My interpretation includes magnitude, uncertainty when applicable, and limits.
+- [ ] I can restart R and render the document without relying on saved objects.
+- [ ] I have recorded one next question for a later version.
+
+
+**A useful next step is enough:** make one result you can reproduce, understand, and explain. Then build from there.
